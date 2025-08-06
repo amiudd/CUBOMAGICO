@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>Cubo 3D</title>
+  <title>Cubo 3D Rebotante</title>
   <style>
     * { 
       margin: 0; 
@@ -34,13 +34,14 @@
       left: 50%;
       transform: translate(-50%, -50%);
       z-index: 2;
+      transition: all 0.5s ease-out;
     }
 
     .cube {
       width: 100%;
       height: 100%;
       transform-style: preserve-3d;
-      transition: transform 0.1s linear;
+      transition: transform 0.5s ease-out;
       transform: scale(0.65) rotateX(-15deg) rotateY(15deg);
       will-change: transform;
     }
@@ -159,14 +160,18 @@
     // Detección de móvil
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     const cube = document.getElementById('cube');
+    const scene = document.querySelector('.scene');
     const audio = document.getElementById('audioPlayer');
-    const symbols = [":3", "i love you", "♡", "❤"];
+    const symbols = ["|-/", "ψ", "tΦp", "Ø"];
 
     // Configuración inicial
     let rotateX = -15;
     let rotateY = 15;
     let startX, startY, isDragging = false;
     let lluviaInterval = null;
+    let lastTapTime = 0;
+    let isBouncing = false;
+    let bounceAnimationId = null;
 
     function updateRotation() {
       cube.style.transform = `scale(0.65) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
@@ -174,14 +179,17 @@
 
     // Control táctil para móviles
     function handleStart(x, y) {
+      if (isBouncing) return;
+      
       isDragging = true;
       startX = x;
       startY = y;
       cube.style.transition = 'none';
+      scene.style.transition = 'none';
     }
 
     function handleMove(x, y) {
-      if (!isDragging) return;
+      if (!isDragging || isBouncing) return;
       
       const sensitivity = 0.8;
       rotateY += (x - startX) * sensitivity;
@@ -194,7 +202,10 @@
 
     function handleEnd() {
       isDragging = false;
-      cube.style.transition = 'transform 0.1s linear';
+      if (!isBouncing) {
+        cube.style.transition = 'transform 0.1s linear';
+        scene.style.transition = 'all 0.1s linear';
+      }
     }
 
     // Eventos táctiles
@@ -256,6 +267,139 @@
       lluviaInterval = null;
     }
 
+    // Animación de rebote con física
+    function bounceCube() {
+      if (isBouncing) {
+        resetPosition();
+        return;
+      }
+      
+      isBouncing = true;
+      cube.style.transition = 'none';
+      scene.style.transition = 'none';
+      
+      // Parámetros de física
+      const gravity = 0.2;
+      const damping = 0.7;
+      const bounceRandomness = 0.3;
+      
+      let posX = window.innerWidth / 2;
+      let posY = window.innerHeight / 2;
+      let velX = (Math.random() - 0.5) * 15;
+      let velY = -12 - Math.random() * 5;
+      let scale = 0.65;
+      
+      const sceneRect = scene.getBoundingClientRect();
+      const cubeSize = sceneRect.width;
+      
+      // Cancelar animación previa si existe
+      if (bounceAnimationId) {
+        cancelAnimationFrame(bounceAnimationId);
+      }
+      
+      function animate() {
+        // Aplicar gravedad
+        velY += gravity;
+        
+        // Actualizar posición
+        posX += velX;
+        posY += velY;
+        
+        // Detección de colisión con bordes
+        const leftBound = cubeSize / 2;
+        const rightBound = window.innerWidth - cubeSize / 2;
+        const topBound = cubeSize / 2;
+        const bottomBound = window.innerHeight - cubeSize / 2;
+        
+        // Rebote en los bordes
+        if (posX < leftBound) {
+          posX = leftBound;
+          velX = -velX * damping * (0.9 + Math.random() * bounceRandomness);
+          velY *= 0.95;
+        } else if (posX > rightBound) {
+          posX = rightBound;
+          velX = -velX * damping * (0.9 + Math.random() * bounceRandomness);
+          velY *= 0.95;
+        }
+        
+        if (posY < topBound) {
+          posY = topBound;
+          velY = -velY * damping;
+        } else if (posY > bottomBound) {
+          posY = bottomBound;
+          velY = -velY * damping * (0.8 + Math.random() * bounceRandomness);
+          velX *= 0.9;
+          
+          // Reducir escala cuando toca el fondo para efecto de "aplastamiento"
+          scale = 0.55 + Math.random() * 0.1;
+        } else {
+          // Restaurar escala gradualmente
+          scale = Math.min(0.65, scale + 0.01);
+        }
+        
+        // Rotación basada en la velocidad
+        rotateY += velX * 0.5;
+        rotateX += velY * 0.3;
+        
+        // Aplicar transformaciones
+        scene.style.left = `${posX - cubeSize / 2}px`;
+        scene.style.top = `${posY - cubeSize / 2}px`;
+        scene.style.transform = 'none';
+        cube.style.transform = `scale(${scale}) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+        
+        // Continuar animación
+        bounceAnimationId = requestAnimationFrame(animate);
+      }
+      
+      // Iniciar animación
+      bounceAnimationId = requestAnimationFrame(animate);
+    }
+
+    function resetPosition() {
+      // Cancelar animación de rebote si está activa
+      if (bounceAnimationId) {
+        cancelAnimationFrame(bounceAnimationId);
+        bounceAnimationId = null;
+      }
+      
+      isBouncing = false;
+      
+      // Restaurar posición y rotación original
+      scene.style.transition = 'all 0.5s ease-out';
+      scene.style.left = '50%';
+      scene.style.top = '50%';
+      scene.style.transform = 'translate(-50%, -50%)';
+      
+      cube.style.transition = 'transform 0.5s ease-out';
+      rotateX = -15;
+      rotateY = 15;
+      updateRotation();
+    }
+
+    // Detección de doble tap
+    function handleDoubleTap() {
+      const now = Date.now();
+      const doubleTapDelay = 300;
+      
+      if (now - lastTapTime < doubleTapDelay) {
+        // Doble tap detectado
+        if (isBouncing) {
+          resetPosition();
+        } else {
+          bounceCube();
+        }
+      }
+      
+      lastTapTime = now;
+    }
+
+    // Event listeners para el cubo
+    cube.addEventListener('click', handleDoubleTap);
+    cube.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      handleDoubleTap();
+    });
+
     // Reproducir música de fondo automáticamente
     audio.addEventListener('play', iniciarLluvia);
     audio.addEventListener('pause', detenerLluvia);
@@ -268,11 +412,14 @@
       document.removeEventListener('click', initAudio);
     }, { once: true });
 
-    // Ajustar al cambiar tamaño (rotación en tablets)
+    // Ajustar al cambiar tamaño
     window.addEventListener('resize', () => {
-      updateRotation();
+      if (!isBouncing) {
+        scene.style.left = '50%';
+        scene.style.top = '50%';
+        scene.style.transform = 'translate(-50%, -50%)';
+      }
     });
   </script>
 </body>
 </html>
-
